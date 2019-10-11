@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "gitRecursive": {
+      "commandName": "Project",
+      "commandLineArgs": "./ master",
+      "workingDirectory": "C:\\Users\\i56409\\src\\SideProjects"
+    }
+  }
+}
