@@ -44,6 +44,31 @@ namespace gitRecursive
 				WorkingDirectory = subDirectory
 			};
 
+			//get branch name
+			var currentBranch = "";
+			baseStartInfo.RedirectStandardOutput = true;
+			baseStartInfo.Arguments = "branch";
+			var branchProcess = Process.Start(baseStartInfo);
+			branchProcess.WaitForExit();
+			if(branchProcess.ExitCode == 128)
+			{
+				return false;
+			}
+			using (var streamReader = branchProcess.StandardOutput)
+			{
+				string line;
+
+				while ((line = await streamReader.ReadLineAsync()) != null)
+				{
+					if (line.StartsWith('*'))
+					{
+						//we've got our branch name
+						currentBranch = line.Replace("* ", "");
+					}
+				}
+			}
+			baseStartInfo.RedirectStandardOutput = false;
+
 			//stash
 			baseStartInfo.Arguments = "stash";
 			var stashProcess = Process.Start(baseStartInfo);
@@ -63,6 +88,16 @@ namespace gitRecursive
 			baseStartInfo.Arguments = "pull";
 			var pullProcess = Process.Start(baseStartInfo);
 			pullProcess.WaitForExit();
+
+			//checkout current branch
+			baseStartInfo.Arguments = $"checkout {currentBranch}";
+			var checkoutOriginalProcess = Process.Start(baseStartInfo);
+			checkoutOriginalProcess.WaitForExit();
+
+			//pop
+			baseStartInfo.Arguments = "stash pop";
+			var stashPopProcess = Process.Start(baseStartInfo);
+			checkoutOriginalProcess.WaitForExit();
 
 			return checkoutProcess.ExitCode == 0 && resetProcess.ExitCode == 0 && pullProcess.ExitCode == 0;
 		}
