@@ -36,28 +36,36 @@ namespace gitRecursive
 			return result;
 		}
 
-		private async Task<bool> Visit(string subDirectory)
+		private async Task<bool> ExecuteGitCommand(string arguments, string subDirectory, bool redirectStandardOutput = false)
 		{
-			ProcessStartInfo baseStartInfo = new ProcessStartInfo()
+			ProcessStartInfo gitCommand = new ProcessStartInfo()
 			{
 				FileName = "git",
-				WorkingDirectory = subDirectory
+				WorkingDirectory = subDirectory,
+				Arguments = arguments,
+				RedirectStandardOutput = redirectStandardOutput
 			};
 
-			//set pager.branch to false
-			baseStartInfo.Arguments = "config --global pager.branch false";
-			var setConfigProcess = Process.Start(baseStartInfo);
-			setConfigProcess.WaitForExit();
+			var process = Process.Start(gitCommand);
+			process.WaitForExit();
+			return process.ExitCode == 0;
+		}
 
-			//get branch name
-			var currentBranch = "";
-			baseStartInfo.RedirectStandardOutput = true;
-			baseStartInfo.Arguments = "branch";
-			var branchProcess = Process.Start(baseStartInfo);
+		private async Task<string> GetCurrentBranch(string subDirectory)
+		{
+			var processStartInfo = new ProcessStartInfo()
+			{
+				Arguments = "branch",
+				FileName = "git",
+				WorkingDirectory = subDirectory,
+				RedirectStandardOutput = true,
+			};
+
+			var branchProcess = Process.Start(processStartInfo);
 			branchProcess.WaitForExit(TimeSpan.FromMilliseconds(1_500).Milliseconds);
 			if(!branchProcess.HasExited || branchProcess.ExitCode == 128)
 			{
-				return false;
+				return string.Empty;
 			}
 			using (var streamReader = branchProcess.StandardOutput)
 			{
@@ -68,46 +76,46 @@ namespace gitRecursive
 					if (line.StartsWith('*'))
 					{
 						//we've got our branch name
-						currentBranch = line.Replace("* ", "");
+						return line.Replace("* ", "");
 					}
 				}
 			}
-			baseStartInfo.RedirectStandardOutput = false;
+			return string.Empty; 
+		}
 
+		private async Task<bool> Visit(string subDirectory)
+		{
+
+			//set pager.branch to false
+			var exitCode = await ExecuteGitCommand("config --global pager.branch false", subDirectory);
+
+			//get branch name
+			var currentBranch = await GetCurrentBranch(subDirectory);
+
+			if(currentBranch.Equals(string.Empty))
+			{
+				return false;
+			}
 			//set pager.branch to true
-			baseStartInfo.Arguments = "config --global pager.branch true";
-			var unsetConfigProcess = Process.Start(baseStartInfo);
-			unsetConfigProcess.WaitForExit();
+			exitCode = await ExecuteGitCommand("config --global pager.branch true", subDirectory);
 
 			//stash
-			baseStartInfo.Arguments = "stash";
-			var stashProcess = Process.Start(baseStartInfo);
-			stashProcess.WaitForExit();
+			exitCode = await ExecuteGitCommand("stash", subDirectory);
 
 			//Reset
-			baseStartInfo.Arguments = "reset --hard";
-			var resetProcess = Process.Start(baseStartInfo);
-			resetProcess.WaitForExit();
+			exitCode = await ExecuteGitCommand("reset --hard", subDirectory);
 
 			//Checkout
-			baseStartInfo.Arguments = $"checkout {_gitBranch}";
-			var checkoutProcess = Process.Start(baseStartInfo);
-			checkoutProcess.WaitForExit();
+			exitCode = await ExecuteGitCommand($"checkout {_gitBranch}", subDirectory);
 
 			//pull
-			baseStartInfo.Arguments = "pull";
-			var pullProcess = Process.Start(baseStartInfo);
-			pullProcess.WaitForExit();
+			exitCode = await ExecuteGitCommand("pull", subDirectory);
 
 			//checkout current branch
-			baseStartInfo.Arguments = $"checkout {currentBranch}";
-			var checkoutOriginalProcess = Process.Start(baseStartInfo);
-			checkoutOriginalProcess.WaitForExit();
+			exitCode = await ExecuteGitCommand($"checkout {currentBranch}", subDirectory);
 
 			//pop
-			baseStartInfo.Arguments = "stash pop";
-			var stashPopProcess = Process.Start(baseStartInfo);
-			checkoutOriginalProcess.WaitForExit();
+			exitCode = await ExecuteGitCommand("stash pop", subDirectory);
 
 			return true;
 		}
